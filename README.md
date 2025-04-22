@@ -9,7 +9,7 @@ The manuscript is currently under a review process.
 
 ## Code implementation
 
-The repository is organized into the following folder tree, which contains all the necessary files and scripts to perform the detailed tasks and reproduce all our results
+The repository is organized into the following folder tree, which contains all the necessary files and scripts to perform the detailed tasks and reproduce all our results. Importantly, scRNAseq for this study was done after sorting for CD45+ and CD45- fraction; thus, all the analysis was carried out in parallel for both fractions independently.
 
 * **01_cellranger_mapping** --> It includes an overview of the project data information, including which samples and 10X libraries were generated. Following the 10X Genomics CellPlex strategy, here we also obtain the demultiplex count matrix for each sample and library. Also, it contains the scripts needed to create a folder directory to perform the sequencing read mapping to the reference genome. 
 
