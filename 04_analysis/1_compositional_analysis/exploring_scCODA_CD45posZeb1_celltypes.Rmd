@@ -1,0 +1,135 @@
+---
+title: "Cell-lineage abundance with scCODA: results"
+author: "Laura Jiménez Gracia"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    number_sections: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.align = "center")
+```
+
+# Introduction
+
+## Objective
+In this Rmarkdown document, we are going to
+
+# Pre-processing
+## Libraries
+```{r warning = FALSE, message = FALSE}
+library(tidyverse)
+library(RColorBrewer)
+```
+
+## Parameters
+Here we will define and load objects and functions that will be used throughout the document.
+```{r}
+# Paths
+path_r_tables <- here::here("04_analysis/1_compositional_analysis/results/tables")
+path_r_figs <- here::here("04_analysis/1_compositional_analysis/results/figs")
+
+# Functions
+source(here::here("bin/utils.R"))
+
+# Parameters
+comparison_name_list <- c("Z1_WT_IMQ_CD45pos-Z1_WT_CD45pos", "Z1_KO_IMQ_CD45pos-Z1_WT_IMQ_CD45pos")
+comparison_info_list <- c("Z1_WT_IMQ vs Z1_WT", "Z1_KO_IMQ vs Z1_WT_IMQ")
+
+cells_order <- c(
+                      "Monocytes", 
+                      "Mature Monocytes",
+                      "Selenop+ M2-like Macrophages",
+                      "Resident M2-like Macrophages",
+                      "Slamf9+ Macrophages",
+                      "M1-like Macrophages",
+                      "MHCII+Ccr2+ Macrophages",
+                      "Proliferative Macrophages",
+                      "Langerhans cells",
+                      "cDC1",
+                      "cDC2",
+                      "Tissue-resident cDC2",
+                      "mregDCs",
+                      "mo-DCs",
+                      "pDC",
+                      "Conventional CD4+ T cells",
+                      "Foxp3+ Tregs",
+                      "Proliferative CD4+ T cells",
+                      "Cytotoxic CD8+ T cells",
+                      "DoubleNegative T cells",
+                      "NK cells",
+                      "ILC2",
+                      "Vγ4 T cells",
+                      "Vγ6 T cells",
+                      "Proliferative DγδT cells",
+                      "Dendritic epidermal T cells",
+                      "Neutrophils",
+                      "Mast cells"
+                                     )
+
+```
+
+
+## Load data
+The data used in this Rmarkdown document comes from **VEIGAEST** dataset.
+```{r}
+sccoda_effect_df_list <- purrr::map2(comparison_name_list, 
+                                     comparison_info_list, 
+                                     function(comparison_name, comparison_info){
+  file_path <- paste0(path_r_tables, "/scCODA_celltypes_", comparison_name, "_effect.tsv")
+  df <- read.csv(file = file_path, sep = "\t")
+  df["comparison_name"] <- comparison_name
+  df["comparison_fraction"] <- sapply(strsplit(comparison_info, "vs "), `[`, 1)
+  df["credible_effects"] <- ifelse(df$Final.Parameter == 0, "False", "True")
+  df
+})
+
+sccoda_effect_global_df <- do.call("rbind", sccoda_effect_df_list)
+sccoda_effect_global_df$Cell.Type <- factor(sccoda_effect_global_df$Cell.Type, levels = cells_order)
+
+
+
+head(sccoda_effect_global_df)
+```
+
+# Dotplot immune
+```{r fig.height=4.5, fig.width=10}
+gg_dotplot_effect_glob <- sccoda_effect_global_df %>%
+    ggplot(aes(
+      x = Cell.Type, 
+      y = comparison_fraction,
+      color = log2.fold.change, 
+      size = credible_effects)) + 
+    ggplot2::geom_point() + 
+    scale_color_gradient2(low="blue", mid="lightgrey", high="red") + # , limits = c(-1,1),
+    cowplot::theme_cowplot() + 
+    labs(title = "scCODA results",
+         color = "Log2FC",
+         size = "Credible effects (FDR = 0.2)") + 
+    theme(axis.ticks = element_blank(),
+          axis.title = element_blank(),
+          axis.line  = element_blank(),
+          axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+          legend.position = "bottom",
+          legend.text = element_text(size=10))
+
+gg_dotplot_effect_glob
+
+fig_path <- paste0(path_r_figs, "/scCODA_dotplot_celltypes_cd45pos.png")
+ggsave(filename = fig_path, 
+       plot = gg_dotplot_effect_glob, width = 10, height = 4.25) 
+
+pdf(file = paste0(path_r_figs, "/scCODA_dotplot_celltypes_cd45pos.pdf"), width = 10, height = 4.25) 
+print(gg_dotplot_effect_glob)    
+dev.off()   
+```
+
+
+# Session Info
+```{r}
+sessionInfo()
+```

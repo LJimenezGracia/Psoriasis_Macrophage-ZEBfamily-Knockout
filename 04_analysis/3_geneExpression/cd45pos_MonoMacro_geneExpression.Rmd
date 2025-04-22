@@ -1,0 +1,472 @@
+---
+title: "Gene Expression"
+author: "Laura Jiménez Gracia"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    number_sections: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE,
+                      fig.align = "center")
+```
+
+# Introduction
+We aim to find the transcriptional signatures associated with a particular condition.
+
+## Objective
+In this Rmarkdown document, we will explore the results of the Differential Expression Analysis (DEA) between the different levels associated to a particular condition.
+
+# Pre-processing
+## Libraries
+```{r warning = FALSE, message = FALSE}
+library(tidyverse)
+library(Seurat)
+library(rstatix)
+library(UCell)
+```
+
+## Parameters
+Here we will define and load objects and functions that will be used throughout the document.
+```{r}
+# Paths
+path_r_objects_in <- here::here("03_clustering_annotation/results/R_objects")
+path_r_results <- here::here("04_analysis/3_geneExpression/results")
+
+# Functions
+source(here::here("bin/utils.R"))
+
+cells_color_palette <- c(
+                      "Monocytes"= "#FF6000", 
+                      "Mature Monocytes"= "#FF944D",
+                      "Selenop+ M2-like Macrophages"= "#F4E409",
+                      "Resident M2-like Macrophages"= "#E6B800",
+                      "Slamf9+ Macrophages"= "#FFA500",
+                      "M1-like Macrophages" = "#C68642",
+                      "MHCII+Ccr2+ Macrophages" = "#583101",
+                      "Proliferative Macrophages" = "#D7263D")
+
+cells_list <- c("Monocytes", 
+                "Mature Monocytes",
+                "Selenop+ M2-like Macrophages",
+                "Resident M2-like Macrophages",
+                "Slamf9+ Macrophages",
+                "M1-like Macrophages",
+                "MHCII+Ccr2+ Macrophages",
+                "Proliferative Macrophages"
+                                       )
+
+
+# Pseudobulk function (equivalent to DecoupleR)
+get_pseudobulk <- function(seurat_obj, sample_col = "individual", groups_col = "cell_type", min_cells = 0, min_counts = 0) {
+  # Extract raw integer counts
+  counts_matrix <- GetAssayData(seurat_obj, slot = "counts")
+  # Extract metadata
+  metadata <- seurat_obj@meta.data
+  
+  # Create a combined group identifier
+  metadata$group_id <- paste(metadata[[sample_col]], metadata[[groups_col]], sep = "_")
+  
+  # Group cells by the combined identifier
+  cell_groups <- split(rownames(metadata), metadata$group_id)
+  # Aggregate counts by summing across all cells in each group
+  pseudobulk_counts <- sapply(cell_groups, function(cells) {
+    if (length(cells) >= min_cells) {
+      summed_counts <- Matrix::rowSums(counts_matrix[, cells, drop = FALSE])
+      if (sum(summed_counts) >= min_counts) {
+        return(summed_counts)
+      }
+    }
+    return(rep(0, nrow(counts_matrix)))
+  })
+  # Convert to matrix format
+  pseudobulk_counts <- as.matrix(pseudobulk_counts)
+  # Remove empty columns
+  valid_cols <- colSums(pseudobulk_counts) > 0
+  pseudobulk_counts <- pseudobulk_counts[, valid_cols, drop = FALSE]
+  
+  # Create sample-level metadata
+  sample_metadata <- unique(metadata[, c(sample_col, groups_col), drop = FALSE])
+  sample_metadata$group_id <- paste(sample_metadata[[sample_col]], sample_metadata[[groups_col]], sep = "_")
+  rownames(sample_metadata) <- sample_metadata$group_id
+  # Filter metadata to match valid columns
+  sample_metadata <- sample_metadata[valid_cols, , drop = FALSE]
+  
+  # Create a new Seurat object with pseudobulk data
+  pseudobulk_seurat <- CreateSeuratObject(
+    counts = pseudobulk_counts,
+    meta.data = sample_metadata
+  )
+  
+  return(pseudobulk_seurat)
+}
+```
+
+
+```{r}
+## Load data
+seurat_obj <- readRDS(paste0(path_r_objects_in, "/post12_cd45pos_alldata_cleaned_final_clustering_annotation_Zeb1.rds"))
+seurat_obj
+```
+
+```{r}
+seurat_obj_sub <- seurat_obj[, (seurat_obj$celltypes_1 %in% c("Monocytes/Macrophages"))]
+
+seurat_obj_sub$celltypes_2 <- as.character(seurat_obj_sub$celltypes_2)
+seurat_obj_sub$celltypes_2 <- factor(x = seurat_obj_sub$celltypes_2,
+                                     levels = cells_list)
+seurat_obj_sub
+table(seurat_obj_sub$sample_id, seurat_obj_sub$celltypes_2)
+
+Idents(seurat_obj_sub) <- "celltypes_2"
+```
+
+# HEME, IRON, ROS genes
+```{r}
+HemeIronROS_genes <- c("Ftl1", "Blvrb", "Spic", "Prdx1", "Hmox1", "Fth1", "Slc48a1")
+HemeIronROS_genes
+```
+
+## Across populations
+```{r fig.width=18, fig.height=5}
+VlnPlot(seurat_obj_sub,
+        features = HemeIronROS_genes,
+        group.by = "celltypes_2",
+        cols =  cells_color_palette,
+        ncol = 7)
+```
+
+
+```{r fig.width=10, fig.height=7}
+seurat_obj_sub$celltypes_2 <- factor(x = seurat_obj_sub$celltypes_2,
+                                     levels =cells_list)
+Idents(seurat_obj_sub) <- "celltypes_2"
+
+dotplot_cells <- DotPlot(seurat_obj_sub,
+        features = HemeIronROS_genes,
+        split.by = "sample_id",
+        cols = "RdBu",
+        scale = TRUE,
+        dot.scale = 5) +
+  coord_flip() +
+  theme(axis.text.y = element_text(face = "italic"),
+        axis.text.x = element_text(angle=90, hjust = 1, vjust = 0.5))
+
+dotplot_cells
+
+pdf(file = paste0(path_r_results, "/cd45pos_Zeb1_MonoMacro_dotplot_HemeIronROS_genes.pdf"), width = 10, height = 7)
+print(dotplot_cells)    
+dev.off()   
+```
+
+## Across condition
+
+```{r fig.width=16, fig.height=5}
+VlnPlot(seurat_obj_sub,
+        features = HemeIronROS_genes,
+        group.by = "sample_id",
+        cols =  c("#FEFAE0", "#DDA15E", "#BC6C25"),
+        ncol = 7)
+```
+
+### Statistics
+```{r}
+# Store all stats
+all_stats <- list()
+
+for (gene in HemeIronROS_genes) {
+  
+  # Create dataframe
+  vln_df <- data.frame(
+    expression = seurat_obj_sub[["RNA"]]@data[gene, ], 
+    condition = seurat_obj_sub$sample_id
+  )
+  
+  # Set condition factor levels
+  vln_df$condition <- factor(
+    x = vln_df$condition,
+    levels = c("Z1_WT_CD45pos", "Z1_WT_IMQ_CD45pos", "Z1_KO_IMQ_CD45pos")
+  )
+  
+  vln_df$expression <- as.numeric(vln_df$expression)
+  
+  # Define comparisons
+  mycomparisons <- list(
+    c("Z1_WT_IMQ_CD45pos", "Z1_WT_CD45pos"),
+    c("Z1_KO_IMQ_CD45pos", "Z1_WT_IMQ_CD45pos")
+  )
+
+  # Optional count summary
+  vln_df_count <- vln_df %>%
+    group_by(condition) %>%
+    summarise(diff_0 = sum(expression != 0), .groups = "drop")
+  print(paste("Counts for gene:", gene))
+
+  # Wilcoxon test across conditions
+  stat.test <- wilcox_test(
+    vln_df,
+    expression ~ condition,
+    comparisons = mycomparisons,
+    alternative = "two.sided"
+  ) %>%
+    adjust_pvalue(method = "fdr") %>%
+    add_significance()
+  
+  stat.test <- stat.test %>% add_xy_position()
+  stat.test$gene <- gene  # tag with gene name
+
+  all_stats[[gene]] <- stat.test  # store result
+}
+
+# Combine all results and save
+combined_stats <- bind_rows(all_stats)
+combined_stats$groups <- NULL
+
+write.table(combined_stats,
+            file = "results/cd45pos_Zeb1_MonoMacro_statistics_HemeIronROS_genes_Condition.csv",
+            sep = ",", row.names = FALSE)
+
+# View all results
+combined_stats
+```
+
+
+## Across population & condition
+
+### Signature
+
+The function AddModuleScore_UCell() allows operating directly on Seurat objects. UCell scores are calculated from raw counts or normalized data, and returned as metadata columns. The example below defines some simple signatures, and applies them on single-cell data stored in a Seurat object.
+
+#### Pseudobulk
+```{r}
+# Pseudobulk
+seurat_obj_Epi_pseudo <- get_pseudobulk(seurat_obj_sub, sample_col = "sample_id", groups_col = "celltypes_2", min_cells = 0, min_counts = 0)
+seurat_obj_Epi_pseudo
+
+## Using positive and negative gene sets, GENE+ or GENE-
+seurat_obj_Epi_pseudo <- AddModuleScore_UCell(seurat_obj_Epi_pseudo, 
+                                   features=list("HemeIronROS_genes" = HemeIronROS_genes), name=NULL)
+head(seurat_obj_Epi_pseudo@meta.data)
+```
+
+```{r fig.height=4, fig.width=5}
+gene_signatures_scores_df <- seurat_obj_Epi_pseudo@meta.data[, c("celltypes_2", "sample_id", "HemeIronROS_genes")]
+
+gene_signatures_scores_df$celltypes_2 <- factor(gene_signatures_scores_df$celltypes_2, levels = cells_list)
+gene_signatures_scores_df <- gene_signatures_scores_df %>%
+  arrange(celltypes_2, sample_id)
+
+heatmap_data <- gene_signatures_scores_df %>%
+  pivot_wider(names_from = sample_id, values_from = HemeIronROS_genes) %>%
+  column_to_rownames("celltypes_2")
+
+write_csv(gene_signatures_scores_df,
+          file = "results/cd45pos_Zeb1_MonoMacro_Heatmap_pseudoSPRRsignature.csv")
+
+pheatmap_cell_by_cond <- pheatmap::pheatmap(t(heatmap_data), 
+         scale = "none",
+         cluster_rows = FALSE, # Cluster rows
+         cluster_cols = FALSE, # Cluster columns
+         show_rownames = TRUE, # Show row names
+         show_colnames = TRUE, # Show column names
+         #breaks = seq(0, 1, length.out = 101), # Legend from 0 to 1
+         #color = colorRampPalette(c("blue", "white", "red"))(100), # Color scale
+         border_color = "white",
+         main = "SPRR Gene Signatures")
+
+
+pdf("results/cd45pos_Zeb1_MonoMacro_Heatmap_pseudoSPRRsignature.pdf", width = 5, height = 4, onefile = TRUE)
+print(pheatmap_cell_by_cond)
+dev.off()
+```
+
+#### Cell level & statistics
+```{r}
+## Using positive and negative gene sets, GENE+ or GENE-
+seurat_obj_sub <- AddModuleScore_UCell(seurat_obj_sub, 
+                                   features=list("HemeIronROS_genes" = HemeIronROS_genes), name=NULL)
+head(seurat_obj_sub@meta.data)
+```
+
+```{r fig.height=3.5, fig.width=5}
+gene_signatures_scores <- seurat_obj_sub@meta.data[, c("celltypes_2", "sample_id", "HemeIronROS_genes")]
+
+gene_signatures_scores_df <- gene_signatures_scores %>%
+  group_by(sample_id, celltypes_2) %>%
+  summarise(mean_SPRR = mean(HemeIronROS_genes, na.rm = TRUE), .groups = "drop")
+head(gene_signatures_scores_df)
+
+gene_signatures_scores_df$celltypes_2 <- factor(gene_signatures_scores_df$celltypes_2, levels = cells_list)
+gene_signatures_scores_df <- gene_signatures_scores_df %>%
+  arrange(celltypes_2, sample_id)
+
+heatmap_data <- gene_signatures_scores_df %>%
+  pivot_wider(names_from = sample_id, values_from = mean_SPRR) %>%
+  column_to_rownames("celltypes_2")
+
+write_csv(gene_signatures_scores_df,
+          file = "results/cd45pos_Zeb1_MonoMacro_Heatmap_SPRRsignature.csv")
+
+pheatmap_cell_by_cond <- pheatmap::pheatmap(t(heatmap_data), 
+         scale = "none",
+         cluster_rows = FALSE, # Cluster rows
+         cluster_cols = FALSE, # Cluster columns
+         show_rownames = TRUE, # Show row names
+         show_colnames = TRUE, # Show column names
+         #breaks = seq(0, 1, length.out = 101), # Legend from 0 to 1
+         #color = colorRampPalette(c("blue", "white", "red"))(100), # Color scale
+         border_color = "white",
+         main = "SPRR Gene Signatures")
+
+
+pdf("results/cd45pos_Zeb1_MonoMacro_Heatmap_SPRRsignature.pdf", width = 5, height = 3.5, onefile = TRUE)
+print(pheatmap_cell_by_cond)
+dev.off()
+```
+
+```{r}
+mycomparisons <- list(c("Z1_WT_IMQ_CD45pos", "Z1_WT_CD45pos"), c("Z1_KO_IMQ_CD45pos", "Z1_WT_IMQ_CD45pos"))
+
+# Statistics for signature
+  vln_df <- data.frame(
+    HemeIronROS_genes = seurat_obj_sub$HemeIronROS_genes, 
+    cells = seurat_obj_sub$celltypes_2,
+    condition = seurat_obj_sub$sample_id
+  )
+vln_df$HemeIronROS_genes <- as.numeric(vln_df$HemeIronROS_genes)
+
+# Factor levels for condition
+vln_df$cells <- factor(vln_df$cells, 
+                           levels = cells_list)
+vln_df$condition <- factor(vln_df$condition, 
+                           levels = c("Z1_WT_CD45pos", "Z1_WT_IMQ_CD45pos", "Z1_KO_IMQ_CD45pos"))
+
+stat.test <- vln_df %>%
+  group_by(cells) %>%
+  wilcox_test(HemeIronROS_genes ~ condition, comparisons = mycomparisons, alternative = "two.sided") %>%
+  adjust_pvalue(method = "fdr") %>%
+  add_significance()
+
+write.table(stat.test, 
+            file = "results/cd45pos_Zeb1_MonoMacro_Heatmap_SPRRsignature_statistics.csv", 
+            sep = ",", row.names = FALSE)
+
+# Optional: View combined results
+stat.test
+```
+
+
+```{r fig.width=17, fig.height=20}
+vln_df <- seurat_obj_sub[["RNA"]]@data[HemeIronROS_genes, ] %>% 
+  as.data.frame() %>%
+  tibble::rownames_to_column(var = "gene") %>%
+  tidyr::pivot_longer(
+    cols = -gene,
+    names_to = "cell_id",
+    values_to = "expression"
+  )
+
+# Add metadata (cell types and condition)
+vln_df$cells <- seurat_obj_sub$celltypes_2[match(vln_df$cell_id, colnames(seurat_obj_sub))]
+vln_df$condition <- seurat_obj_sub$sample_id[match(vln_df$cell_id, colnames(seurat_obj_sub))]
+
+
+# Factor levels for condition
+vln_df$cells <- factor(vln_df$cells, 
+                           levels = cells_list)
+vln_df$condition <- factor(vln_df$condition, 
+                           levels = c("Z1_WT_CD45pos", "Z1_WT_IMQ_CD45pos", "Z1_KO_IMQ_CD45pos"))
+
+# Plot
+gg_vln <- vln_df %>% 
+  ggplot(aes(x = condition, y = expression, fill = condition)) + 
+  geom_violin(adjust =1, trim=TRUE, scale = "width") +
+  facet_wrap(cells ~ gene, scales = "free_y", ncol = 7) +
+  scale_fill_manual(values = c("#FEFAE0", "#DDA15E", "#BC6C25")) +
+  geom_jitter(alpha=0.4) +
+  labs(x = "", y = "Expression Levels", fill = "Condition") +
+  theme_minimal() +
+  theme(strip.text = element_text(size = 15),
+        axis.text = element_text(size=14),
+        axis.title = element_text(size=18),
+        legend.text = element_text(size=14),
+        legend.position = "bottom") +
+  scale_y_continuous(expand = expansion(mult = c(0.15, 0.15)))
+print(gg_vln)
+
+pdf("results/cd45pos_Zeb1_MonoMacro_VlnPlot_HemeIronROS_genes.pdf", width = 17, height = 20, onefile = TRUE)
+print(gg_vln)
+dev.off()
+```
+
+### Statistics
+
+```{r}
+# Initialize an empty list to collect all stats
+all_stats <- list()
+
+for (gene in HemeIronROS_genes) {
+  
+  # Create violin plot dataframe for the gene
+  vln_df <- data.frame(
+    expression = seurat_obj_sub[["RNA"]]@data[gene, ], 
+    cells = seurat_obj_sub$celltypes_2,
+    condition = seurat_obj_sub$sample_id
+  )
+  
+  vln_df$condition <- factor(
+    x = vln_df$condition,
+    levels = c("Z1_WT_CD45pos", "Z1_WT_IMQ_CD45pos", "Z1_KO_IMQ_CD45pos")
+  )
+  
+  vln_df$expression <- as.numeric(vln_df$expression)
+
+  mycomparisons <- list(
+    c("Z1_WT_IMQ_CD45pos", "Z1_WT_CD45pos"), 
+    c("Z1_KO_IMQ_CD45pos", "Z1_WT_IMQ_CD45pos")
+  )
+
+  # Check counts (optional for debug)
+  vln_df_count <- vln_df %>% 
+    group_by(cells, condition) %>% 
+    summarise(diff_0 = sum(expression != 0), .groups = "drop")
+  print(paste("Counts for gene:", gene))
+
+  # Compute statistics
+  stat.test <- vln_df %>%
+    group_by(cells) %>%
+    wilcox_test(expression ~ condition, comparisons = mycomparisons, alternative = "two.sided") %>%
+    adjust_pvalue(method = "fdr") %>%
+    add_significance()
+  
+  stat.test <- stat.test %>% add_xy_position()
+  stat.test$gene <- gene  # Add gene info
+
+  all_stats[[gene]] <- stat.test  # Save per gene stats
+  
+  # Optional: save each gene's result individually
+  # write.table(as.data.frame(stat.test),
+  #             file = paste0("results/statistics_", gene, ".csv"),
+  #             sep = ",", row.names = FALSE)
+}
+
+# Combine and save all stats
+combined_stats <- bind_rows(all_stats)
+combined_stats$groups <- NULL
+
+write.table(combined_stats, 
+            file = "results/cd45pos_Zeb1_MonoMacro_statistics_HemeIronROS_genes_CellsCondition.csv", 
+            sep = ",", row.names = FALSE)
+
+# Optional: View combined results
+combined_stats
+```
+
+
+# Session info
+```{r}
+sessionInfo()
+```
