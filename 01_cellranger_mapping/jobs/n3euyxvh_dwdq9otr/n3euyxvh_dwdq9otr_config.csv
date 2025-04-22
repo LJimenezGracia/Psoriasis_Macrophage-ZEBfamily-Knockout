@@ -1,0 +1,20 @@
+[gene-expression]
+reference,/scratch/groups/singlecell/data/reference/refdata-gex-mm10-2020-A
+cmo-set,/scratch/devel/ljimenez/projects/POST/POST_12/01_cellranger_mapping/data/CMO_reference.csv
+expect-cells,20000
+no-secondary,true
+no-bam,true
+[libraries]
+fastq_id,fastqs,feature_types
+n3euyxvh_dwdq9otr_CMO,/scratch/devel/ljimenez/projects/POST/POST_12/01_cellranger_mapping/jobs/n3euyxvh_dwdq9otr/fastq/CMO,Multiplexing Capture
+n3euyxvh_dwdq9otr,/scratch/devel/ljimenez/projects/POST/POST_12/01_cellranger_mapping/jobs/n3euyxvh_dwdq9otr/fastq/cDNA,Gene Expression
+
+[samples]
+sample_id,cmo_ids
+Z1_WT_IMQ_CD45pos,CMO301
+Z1_KO_IMQ_CD45pos,CMO302
+Z2_WT_IMQ_CD45pos,CMO303
+Z2_KO_IMQ_CD45pos,CMO304
+Z1_WT_CD45pos,CMO305
+Z2_WT_CD45pos,CMO306
+

@@ -1,0 +1,9 @@
+project,subproject,gem_id,library_id,library_name,library_barcode,hashing,type,fraction
+POST,POST_12,hik7kuah_mz8e52qv,215440,CD45pos_GEX1,AU8603,CellPlex,cDNA,CD45+
+POST,POST_12,hik7kuah_mz8e52qv,215444,CD45pos_CellPlex1,AU8607,CellPlex,CMO,CD45+
+POST,POST_12,n3euyxvh_dwdq9otr,215441,CD45pos_GEX2,AU8604,CellPlex,cDNA,CD45+
+POST,POST_12,n3euyxvh_dwdq9otr,215445,CD45pos_CellPlex2,AU8608,CellPlex,CMO,CD45+
+POST,POST_12,qa7vxsq4_7bfnyfsk,215442,CD45neg_GEX1,AU8605,CellPlex,cDNA,CD45-
+POST,POST_12,qa7vxsq4_7bfnyfsk,215446,CD45neg_CellPlex1,AU8609,CellPlex,CMO,CD45-
+POST,POST_12,pehhzg9b_i6ruv9ly,215443,CD45neg_GEX2,AU8606,CellPlex,cDNA,CD45-
+POST,POST_12,pehhzg9b_i6ruv9ly,215447,CD45neg_CellPlex2,AU8610,CellPlex,CMO,CD45-
